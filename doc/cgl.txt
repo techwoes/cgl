@@ -1,0 +1,637 @@
+
+Copyright (c) 1998-2000 Carson S.K. Harding
+$Date: 2000/12/11 23:49:45 $
+
+
+THE CGL LIBRARY
+
+
+
+Introduction:
+=============
+
+The cgl library is an ANSI C CGI library for various tasks 
+associated with writing CGI programs in C, most notably handling
+input from CGI forms. The routines are easy to use, but if desired,
+access to their underlying mechanisms is also available for
+greater control over their behaviour. 
+
+The quick first step is to call cgl_init() at the beginning of the
+program. This stores the CGI environment into cgl_Env, and loads any
+form data. Form data values can then be accessed with cgl_getvalue()
+or cgl_getvalues(). When finished, close up by calling cgl_freedata() 
+to release the form and environment data.
+
+Along the way, there are a number of utility functions for generating
+headers, various HTML tags (hidden, headings, etc.) and a couple of
+general purpose functions to play catch-up to what one usually has in 
+the syntax of a scripting language such as Perl (cgl_addstr()). The 
+hashed list data structure used to store and access form data can
+be used in a fashion similar to an associative-array; hopefully this
+is another convenience.
+
+The library is ANSI C, but I have not tested or tried it on anything
+other than Unix. It runs under OpenBSD, Solaris, and AIX; on Alpha,
+Sparc, and RS/6000. cgl_mkpath() may need a change if building for
+some other OS type.
+
+Cgl functions try to avoid allocating storage. The hashed list
+functions do not duplicate strings they are passed, they merely store
+the pointers they are given. Except for the structures internal to the
+library, managing storage is always the caller's responsibility. It
+should be easy enough to create wrapper functions for, say,
+cgl_insertnode() that strdup() name and value and pass the new
+pointers if that is what is desired.
+
+
+Global Variables:
+=================
+
+cglEnv	*cgl_Env
+cgllist *cgl_Formdata
+cgllist *cgl_Cookies
+int 	cglerrno
+int 	cglsyserr
+extern char *cglerrlist[];
+
+
+
+Functions:
+==========
+
+
+Top Level Data Access Functions:
+--------------------------------
+
+int
+cgl_init(void)
+
+    cgl_init() calls cgl_initenv(), cgl_initformdata(), and
+cgl_initcookies() in order. If any one of these fails, cgl_init()
+returns -1.
+
+
+int
+cgl_initenv(void)
+
+    cgl_initenv() allocates and initializes the global cgl environment
+structure cgl_Env (defined in cgl.h). Returns 0 on success; -1 on
+failure, and setting cglerrno. Members of cgl_Env are set to point to
+their corresponding environment variables, or to an empty string
+(rather than NULL) if they do not exist.
+
+
+int
+cgl_initformdata(void)
+
+    cgl_initformdata() reads the form data (whether GET or POST) and
+parses it into the hashed list cgl_Formdata. cgl_initformdata()
+returns 0 on success, and -1 on error, setting cglerrno. cgl_initenv()
+must be called before cgl_initformdata().
+
+
+int 
+cgl_initcookies(void)
+
+    cgl_initcookies() reads the cookie string (if one exists) and
+parses it into the hashed list cgl_Cookies. cgl_initcookies() returns
+0 on success, and -1 on error, setting cglerrno. cgl_initenv() must be
+called before cgl_initcookies().
+
+
+void
+cgl_freeall(void)
+
+    cgl_freeall() calls cgl_freeenv(), cgl_freeformdata(), and 
+cgl_freecookies().
+
+
+void
+cgl_freeenv(void)
+
+    cgl_freenv() frees the global structure pointed toi by cgl_Env 
+and reinitializes cgl_Env to NULL.
+
+
+void 
+cgl_freeformdata(void)
+
+    cgl_freeformdata() frees the hashed list cgl_Formdata, as well as
+the internal buffer cgl_Buf (where the form data strings are stored).
+It reinitializes cgl_Formdata to NULL.
+
+
+void 
+cgl_freecookies(void)
+
+    cgl_freecookies() frees the hashed list cgl_Cookies, as well as
+the internal buffer cgl_Cookiebuf (where the cookie values are stored).
+It reinitializes cgl_Cookies to NULL.
+
+
+char 
+*cgl_getvalue(char *name)
+
+    cgl_getvalue() returns a pointer to the value string associated
+with name. If the name does not exist in the list, cgl_getvalue()
+returns NULL.
+
+
+char
+**cgl_getvalues(int *count, char *name)
+
+    cgl_getvalues() returns a pointer to an array of value strings
+associated with name. If the name does not exist in the list,
+cgl_getvalues() returns NULL. The number of items found is stored into
+count, with -1 stored on error, and cglerrno set to the error that
+occured. The array of value strings that cgl_getvalues() returns can
+be passed to free() with no ill effects: the pointers it contains do
+not point to storage allocated by cgl_getvalues() but are merely
+copies of the value pointers in cgl_Formdata. SO DON'T TRY TO FREE
+IT AS YOU WOULD A NORMAL ARGV STYLE ARRAY OF POINTERS TO ALLOCATED
+STRINGS.
+
+
+char 
+*cgl_getcookie(char *name)
+
+    Like cgl_getvalue(), but searches the cookie list from
+HTTP_COOKIE. If the name does not exist in the list, cgl_getcookie()
+returns NULL.
+
+
+char
+**cgl_getcookies(int *count, char *name)
+
+    Like cgl_getvalues(), but searches the cookie list from
+HTTP_COOKIE. If the name does not exist in the list,
+cgl_getcookies() returns NULL. The number of items found is stored
+into count, with -1 stored on error, and cglerrno set to the error
+that occured. The array of value strings that cgl_getvalues() returns can
+be passed to free() with no ill effects: the pointers it contains do
+not point to storage allocated by cgl_getcookies() but are merely
+copies of the value pointers in cgl_Cookies.
+
+
+Second Level Data Access Functions:
+-----------------------------------
+
+Most of the top level data functions that act on the CGL global
+variables are wrappers for the more generalized second level functions
+that act on specified data structures.
+
+
+char *
+cgl_getnodevalue(cgllist *cdata, char *name)
+
+    cgl_getnodevalue() returns a pointer to the value string
+associated with name in the hashed list cdata. If the name does not
+exist in the list, cgl_getnodevalue() returns NULL.
+
+
+char **
+cgl_getnodevalues(cgllist *cdata, int *count, char *name)
+
+    cgl_getvalues() returns a pointer to an array of value strings
+associated with name in the hashed list cdata. If the name does not
+exist in the list, cgl_getnodevalues() returns NULL.
+
+
+cglnode 
+*cgl_fetchnode(cgllist *cdata, char *name)
+
+   cgl_fetchnode() returns a pointer to the hashed list node that
+contains the value for name, and sets cdata->cur to point to that node. 
+If name does not exist in the list, cgl_fetchnode() returns NULL.
+
+
+int 
+cgl_insertnode(cgllist *cdata, char *name, void *value, int where)
+
+    cgl_insertnode() creates a new node for name and value and inserts
+it into the hashed list cdata. Note that the node is created with
+pointers to name and value, no new storage is allocated for either
+name or value. Where the node is inserted in the list is controlled by
+"where" which may have one of the following values:
+
+	CGL_INSERT_TAIL		insert at head of list
+	CGL_INSERT_HEAD		insert at tail of list
+	CGL_INSERT_PREV		insert before cdata->cur
+	CGL_INSERT_NEXT		insert after cdata->cur
+
+Whether or not the node is hashed depends on the conditions described
+above in the description of the cgllist hashed list. cgl_insertnode()
+returns 0 on success, and -1 on failure.
+
+
+void
+cgl_deletenode(cgllist *cdata)
+
+    cgl_deletenode deletes the node pointed to by cdata->cur from
+the cdata hashed list.
+
+
+int
+cgl_hashlist(cgllist *cdata, int hashsz)
+
+    cgl_hashlist() creates a hash table for cdata and hashes the
+contents of the list into it. If the list was already hashed, the
+previous table is destroyed and a new one created. cgl_hashlist() is 
+normally called internally by cgl_insertnode(). If cgl_hashlist() is
+called with a hashsz of 0, the hash table for cdata will be removed,
+and all searches will become linear. But note: if hashing control is
+set to CGL_HASH_AUTO, the next insertion beyond cdata->hash.h_mincount
+will cause the list to be rehashed, and if hashing control is set
+to some fixed hashsize, the very next insertion will cause the list
+to be rehashed. To turn hashing totally off for a list, set
+cdata->hash.h_control to CGL_HASH_OFF and then call cgl_hashlist() with
+a hashsz of 0.
+
+
+void
+cgl_freedata(cgllist *cdata)
+
+    cgl_freedata() frees the hashed list cdata.
+
+
+cgllist *
+cgl_newdata(void)
+
+    cgl_newdata() returns a pointer to a new, initialized hashed
+list structure. The maximum number of elements is set to
+cgl_def_maxcount (CGL_MAXCOUNT), the hashing behaviour is set to
+cgl_def_hcontrol (CGL_HASH_AUTO), and the minumum element count
+on which to start hashing is set to cgl_def_mincount (CGL_MINTOHASH).
+
+
+cgllist *
+cgl_newhash(void)
+
+    cgl_newhash() returns a pointer to a new, initialized hashed
+list structure. The maximum number of elements is unlimited, the 
+hashing behaviour is set to CGL_HASH_AUTO, and the minumum element count
+on which to start hashing is set to 0 (to force immediate hashing).
+hash.h_unique is set to CGL_HASH_UNIQUE to turn off support for
+duplicate names. If a name/value pair is inserted that has the
+same name of a pair existing in the list, the pair being inserted
+replaces the previous pair.
+
+
+int 
+cgl_parsecgibuf(cgllist *cdata, char *query)
+
+    cgl_parsecgibuf() parses the query string query (from either
+GET or POST data) into the hashed list cdata.
+
+
+int 
+cgl_parsecookiebuf(cgllist *cdata, char *cookies)
+
+    cgl_parsecookiebuf() parses the cookie string cookies (from 
+HTTP_COOKIE) into the hashed list cdata.
+
+
+cglnode *cgl_firstnode(cgllist *cdata);
+cglnode *cgl_nextnode(cgllist *cdata);
+cglnode *cgl_prevnode(cgllist *cdata);
+cglnode *cgl_lastnode(cgllist *cdata);
+
+    cgl_firstnode(), cgl_nextnode(), cgl_prevnode(), and cgl_lastnode()
+set and return cdata->cur to point to the appropriate list node.
+
+
+void
+cgl_perror(FILE *fw, char *s)
+
+    cgl_perror() is like perror(), but prints a string for the
+internal cglerrno number, or for the system errno if cglerrno
+is set to CGL_SYSERR.
+
+
+char *
+cgl_strerror(void)
+
+    cgl_strerror() is like strerror(), but prints a string for the
+internal cglerrno number, or for the system errno if cglerrno
+is set to CGL_SYSERR. Unlike strerror() it does not take an
+argument; but uses the cglerrno and the saved cglsyserrno.
+
+
+Header Functions:
+-----------------
+
+void	
+cgl_html_header(void);
+
+	Prints "Content-type: text/html\n\n".
+
+
+void	
+cgl_content_header(char *type)
+
+	Prints "Content-type: %s\n\n", where %s is replaced by the 
+string pointed to by "type".
+
+
+void	
+cgl_nph_header(char *version, char *status)
+
+
+void	
+cgl_status_header(char *status)
+
+
+void	
+cgl_location_header(char *location)
+
+
+void	
+cgl_pragma_header(char *s)
+
+
+int	
+cgl_accept_image(void)
+
+    Looks for the string "image" in the HTTP_ACCEPT string. cgl_initenv() 
+must have previously been called.
+
+
+HTML Functions:
+---------------
+
+void	
+cgl_html_begin(char *title)
+
+    Prints the following on stdout:
+
+	<HTML>
+	<HEAD>
+	<TITLE>title</TITLE>
+	</HEAD>
+	<BODY>
+
+
+void	
+cgl_html_end(void)
+
+    Prints the following on stdout:
+
+	</BODY>
+	</HTML>
+
+    And then flushes stdout.
+
+
+void	
+cgl_put_heading(int level, char *heading)
+
+    Prints the argument "heading" surrounded by HTML heading marks
+indicating level. If "level" is less than 1, 1 is used; if greater
+than 6, 6 is used. For example, 
+
+	cgl_put_heading(2, "Data Access Functions");
+
+results in:
+
+	<h2>Data Access Functions</h2>
+
+being written to stdout.
+  
+
+void	
+cgl_put_hidden(char *name, char *value)
+
+    cgl_put_hidden() is a shortcut for putting hidden variables into
+a CGI generated form.
+
+
+Cookie Functions:
+-----------------
+
+int	
+cgl_put_cookie(char *name, char *opaque, 
+    char *expires, char *path, char *domain, int secure)
+
+    cgl_put_cookie() generates a Set-Cookie header.
+
+
+char	*
+cgl_cookietime(time_t *t)
+
+    cgl_cookietime() returns a pointer to a static buffer containing an
+ascii string representing time_t t, formatted according to the Netscape
+preliminary specification for cookies.
+
+
+Encoding and Decoding Functions:
+--------------------------------
+
+int	
+cgl_urlencode(char *s, FILE *fw)
+
+    Replaces spaces with '+' signs and calls cgl_urlescape() to encode
+special characters as hex escapes.
+
+
+void	
+cgl_urldecode(char *s)
+
+    Replaces '+' signs with spaces in s, and calls cgl_urlunesape() to
+unhexencode the string s.
+
+
+int	
+cgl_urlescape(char *s, FILE *fw)
+
+    Replaces special characters with HTML URL hex sequences in s. Writes
+result to file stream fw.
+
+
+int	
+cgl_urlunescape(char *s)
+
+    Replaces HTML URL hex sequences in s with the ASCII characters they
+represent.
+
+
+int	
+cgl_htmlencode(char *s, FILE *fw)
+
+    Calls cgl_htmlescape() on s.    
+
+
+void
+cgl_htmldecode(char *s)
+
+    Calls cgl_htmlunescape() on s.    
+
+
+int	
+cgl_htmlescape(const char *s, FILE *fw)
+
+    Converts special characters in s to HTML numeric codes, 
+and writes modified output to fw.
+
+
+void	
+cgl_htmlunescape(char *s)
+
+    Converts HTML numeric codes to special characters in place in s. 
+Does not do symbolic codes yet.
+
+
+char	
+cgl_hex2char(char *s)
+
+    Returns ASCII character for the passed HEX digit.
+
+
+void	
+cgl_charify(char *s, char from, char to)
+
+    Converts any instance of "from" to "to" in string s. Used by above
+functions.
+
+
+Utility Functions:
+------------------
+
+char 	*
+cgl_stradd(char *s1, char *s2)
+
+    Concatenate s2 onto s1, into a newly allocated string and return
+a pointer to the new string. Neither s1 or s2 are modified.
+
+char 	*
+cgl_mkpath(char *p, char *f, char *x)
+
+    Return a pointer to a path constructed from p (the path to the directory),
+f (the file basename), and x (an extension).
+
+
+Default Values and Limits:
+==========================
+
+Variable		Define		Value	   Description
+-----------------------------------------------------------------------
+cgl_def_maxdata		CGL_MAX_DATA	1024*1024  Maximum bytes of form 
+						     data read.
+cgl_def_hcontrol	CGL_HASH_AUTO	0	   Auto-size hash table   
+			CGL_HASH_OFF	-1	   Don't hash
+					>0	   Set hash table to
+						     specified size
+cgl_def_mincount	CGL_MIN_COUNT	11	   Start hashing at this
+						     number of variables.
+cgl_def_maxcount	CGL_MAX_COUNT	1000	   Maximum number of
+						     variables.
+
+
+Data Structures:
+================
+
+cglnode and cgllist (the hashed list):
+---------------------------------------
+
+
+(Knowing this is _not_ necessary to making effective use of
+the CGL top-level library routines.)
+
+The fundamental data structure of the cgl library routines is the
+hashed list structure, cgllist. 
+
+Name/value pairs, whether from form data, cookies, or another,
+user-specified source, are stored in a doubly-linked list of cglnode
+elements:
+
+	typedef struct hashedlistnode cglnode;
+	struct hashedlistnode {
+		cglnode	*next;
+		cglnode	*prev;
+		cglnode	*bucket;
+		cglnode	*dupe;
+		char	*name;
+		void	*value;
+	};
+
+The cglnode list element has two members to support hashing:
+bucket and dupe. When hashed, bucket points to the next list
+element that hashes to the same value, or bucket, in the hash table,
+and dupe points to the next list element that has the same name,
+but (usually) different value.
+
+cgllist is essentially a control structure for a list of cglnode
+elements.
+
+	typedef struct hashedlist cgllist;
+	struct	hashedlist {
+		cglnode *head;
+		cglnode *tail;
+		cglnode *cur;
+		struct {
+			int	h_control;
+			int	h_unique;
+			int	h_mincount;
+			int	h_count;
+			int	h_collisions;
+			int	h_used;
+			int	h_resize;
+			int	h_size;
+			cglnode **h_table;
+		} hash;
+		int	count;
+		int	maxcount;
+		int	source;
+	};
+
+cgllist provides pointers to the head and tail elements of the cglnode
+list, as well as a cursor, a pointer to the last element operated on 
+or retrieved. It also provides a count of the number of elements in
+the list, the maximum number of elements permitted to be stored in
+the list, and an indication of the source of the data. Last, but not
+least, it provides control information for and a pointer to a hash
+table for fast lookups of names in the list.
+
+The behaviour of the list is controlled by the value of hash.h_control.
+If set to CGL_HASH_OFF, then the list is never hashed. All searches
+for names are linear, starting at the beginning of the list and
+working to end. Searches for names with multiple values necessarily
+require the entire list to be searched on each lookup.
+
+If hash.h_control is set to some value greater than CGL_HASH_AUTO,
+that value is used as the size of the hash table, and each element is
+automatically inserted into the hash table hash.h_table when inserted
+into the list.
+
+If hash.h_control is set to CGL_HASH_AUTO, the behaviour depends on
+the number of elements in the list. If the number of elements in the
+list is small, then the hash table is not used, on the theory that
+for a handful of elements, the difference between a linear search
+and the hash search is negligable. But once the number of
+elements in the list exceeds hash.h_mincount, hashing is invoked
+for faster lookups. Hashing has two advantages: faster lookups, and
+as the duplicates were found and linked off cglnode->dupe when
+the element was hashed, one stop retrieval of _all_ the values
+for a given name.
+
+If maxcount is set to zero, any number of elements may be stored
+in the list.
+
+hash.h_unique is used to control the handling of duplicate names.
+The default behaviour (CGL_HASH_DUPES) is to permit duplicate
+names, and return them either in an array (cgl_getvalues()) or
+as a chain off the cglnode dupe pointer (cgl_fetchnode()). If
+hash.h_unique is set to  CGL_HASH_UNIQUE, duplicates are not
+permitted, names are always hashed (to find the duplicates),
+and later insertions with the same name will replace the earlier
+instance. cgl_newdata() returns a pointer to a cgllist set up 
+for duplicates, cgl_newhash() returns a pointer to a cgllist
+set up for unique names.
+
+cgllist is overkill for what the cgl library uses it for; but it was
+intended for more than form data. With a judicious choice of hashsize,
+it can be used as a kind of associative array, where data indexed by
+string can be stored and recalled. For example, there is a form
+library that uses it in this way, storing table elements that are
+accessed on demand as templates are processed, and allowing for the
+dynamic addition of new actions and values.
+

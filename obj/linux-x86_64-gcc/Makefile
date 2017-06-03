@@ -1,0 +1,42 @@
+#
+# Makefile for cgl library.
+#
+# $Id: Makefile.cgl,v 1.7 2004/11/20 06:13:45 harding Exp $
+#
+
+CGIBIN=		/usr/local/apache/cgi-bin
+
+PREFIX?=	/usr/local
+
+CC=		gcc
+CFLAGS=		-g -O -Wall -Wcomment -pedantic -ansi -I./
+LIBS=		 -L./ -lcgl
+
+all:		libcgl.a testcgl
+
+libcgl.a:	cgl.o
+		ar ru libcgl.a cgl.o
+		ranlib libcgl.a
+
+cgl.o:		cgl.h
+
+testcgl:	testcgl.o libcgl.a
+		$(CC) $(CFLAGS) testcgl.o $(LIBS) -o testcgl
+
+clean:
+		/bin/rm -rf *.o *~
+
+allclean:	clean
+		/bin/rm -rf *.a testcgl $(DISTDIR)
+
+install:	libcgl.a
+		mkdir -p -m 755 /usr/local/lib
+		mkdir -p -m 755 /usr/local/include
+		cp -f libcgl.a ${PREFIX}/lib
+		cp -f cgl.h ${PREFIX}/include
+		chmod 444 ${PREFIX}/lib/libcgl.a
+		chmod 444 ${PREFIX}/include/cgl.h
+
+install-test:	libcgl.a testcgl
+		cp -f testcgl $(CGIBIN)
+		chmod 555 $(CGIBIN)/testcgl

@@ -1,0 +1,164 @@
+#!/bin/sh
+#
+# Creates an object directory for a specific target os and platform.
+#
+# $Id: Setup,v 1.1 2004/11/20 06:18:51 harding Exp $
+#
+
+PROG=`basename $0`
+
+doconf=yes
+
+ECHO=/bin/echo
+
+usage() {
+        echo "usage: $PROG [<os-arch-compiler>]"
+        echo " e.g.: $PROG auto"
+        echo " e.g.: $PROG solaris-sparc-gcc"
+}
+
+
+autosystype() {
+
+	SYSOS=`uname -s | tr '[A-Z]' '[a-z]'`
+	case $SYSOS in
+	sunos)
+	    REV=`uname -r`
+	    case $REV in
+	    5*)
+		SYSOS=solaris
+		ECHO=/usr/ucb/echo
+		;;
+	    *)
+	        SYSOS=sunos
+		;;
+	    esac
+	    MACH=`uname -p`
+	    ;;
+	*)
+	    MACH=`uname -m`
+	    ;;
+	esac
+
+	case $SYSOS in
+	freebsd|openbsd|netbsd|linux)
+	    CC=gcc
+	    ;;
+	*)
+	    CCOUT=`cc 2>&1`
+	    case "$CCOUT" in
+	    *"not found")
+		CC=""
+		;;
+	    *"not installed")
+		CC=""
+		;;
+	    *)
+		CC=cc
+		;;
+	    esac
+	    if [ "x$CC" = "x" ]; then
+	        CCOUT=`gcc 2>&1`
+	        case "$CCOUT" in
+	        *"not found")
+		    CC=""
+		    ;;
+		*)
+		    CC=gcc
+		    ;;
+		esac
+	    fi
+	    ;;
+	esac
+	if [ "x$CC" = "x" ]; then
+	    $ECHO "could not find cc or gcc:"
+	    $ECHO "   fix your path, or (and if your C compiler"
+	    $ECHO "   is not named cc or gcc) run Setup as"
+	    $ECHO "        ./Setup $SYSOS-$MACH-<compiler-name>"
+	    $ECHO "   for example: "
+	    $ECHO "        ./Setup $SYSOS-$MACH-xlc"
+	    exit 1
+	fi
+	SYSTYPE="$SYSOS-$MACH-$CC"
+}
+
+# find out if we've a non-conf flag
+if [ "x$1" = "x-n" ]; then
+	doconf=no
+	shift
+fi
+
+# find out if we're guessing the system type or have been told
+if [ "x$1" = "x" -o "x$1" = "xauto" ]; then
+    autosystype
+else
+    SYSTYPE=$1
+fi
+
+# make sure
+if [ "x$SYSTYPE" = "x" ]; then
+    $ECHO "No system type, aborting!"
+    exit 1
+fi
+
+OBJDIR="obj/$SYSTYPE"
+SRCDIR="../src"
+
+#
+# recurse down into src and obj trees, making directories and links
+#
+linkdirs() {
+	cd $ODIR
+	SDIR=../$SDIR
+	typeset LSDIR=$SDIR
+	for i in $SDIR/*; do
+		if [ x"$i" = x"$SDIR/RCS" ]; then
+			$ECHO -n "."
+		elif [ -d $i ]; then
+			# $ECHO "$i is dir"
+			ODIR=`basename $i`
+			mkdir $ODIR
+			SDIR=$i
+			linkdirs
+		else
+			ln -s $i .
+			$ECHO -n "."
+		fi
+	done
+	# make sure no link to anything called Makefile 
+	# or to object files, etc
+	/bin/rm -f Makefile *.o *.a *~
+	SDIR=$LSDIR
+	cd ..
+}
+
+if [ -d "$OBJDIR" ]; then
+	$ECHO -n "Deleting old object directory..."
+        /bin/rm -rf "$OBJDIR"
+	$ECHO "done."
+fi
+
+mkdir -p "$OBJDIR"
+
+SDIR=$SRCDIR
+ODIR=$OBJDIR
+$ECHO -n "$ODIR ["
+linkdirs
+$ECHO "]"
+cd ..
+
+#
+if [ x"$doconf" = x"yes" ]; then
+    cd $OBJDIR
+    ./Configure
+    exitval=$?
+    if [ $exitval -ne 0 ]; then
+	exit 1
+    fi
+else
+    $ECHO ""
+    $ECHO "Object directory created. Now \"cd $OBJDIR\" and"
+    $ECHO "type \"./Configure\" to generate Makefile"
+    $ECHO ""
+fi
+

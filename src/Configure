@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# $Id: Configure,v 1.1 2004/11/20 06:18:55 harding Exp $
+#
+
+if [ "X"$1 = "X" -o "X"$1 = "X"auto ]; then
+	s=`pwd`
+	platform=`basename $s`
+	echo "Configuring for $platform."
+else
+	platform=$1
+fi
+
+case "$platform" in
+openbsd*|freebsd*|netbsd*)
+	awk -f config/versuck.awk tag=$platform Makefile.src > Makefile
+	;;
+solaris-*)
+	nawk -f config/versuck.awk tag=$platform Makefile.src > Makefile
+	;;
+osf1-*)
+	nawk -f config/versuck.awk tag=$platform Makefile.src > Makefile
+	;;
+aix-*)
+	nawk -f config/versuck.awk tag=$platform Makefile.src > Makefile
+	;;
+linux-*)
+	awk -f config/versuck.awk tag=$platform Makefile.src > Makefile
+	;;
+ms-djgpp)
+	# oh lord, what a hideous thought...
+	nawk -f config/versuck.awk tag=$platform Makefile.src > Makefile
+	;;
+src)
+	# for special makefiles in src directory
+	nawk -f config/versuck.awk tag=$platform Makefile.src > Makefile
+	;;
+*)
+	echo "$platform not a recognized system name"
+	usage
+	exit 1;
+	;;
+esac
+if [ -x config_local.sh ]; then
+        export platform
+        ./config_local.sh
+fi
+echo "Now edit Makefile for local setup, then type 'make' to build program."
+exit 0
